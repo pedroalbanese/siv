@@ -123,7 +123,7 @@ func (c *Cipher) Open(dst []byte, ciphertext []byte, data ...[]byte) ([]byte, er
 
     ctr := cipher.NewCTR(c.b, iv)
 
-    ret, out := SliceForAppend(dst, len(ciphertext)-len(iv))
+    ret, out := alias.SliceForAppend(dst, len(ciphertext)-len(iv))
     ctr.XORKeyStream(out, ciphertext[len(iv):])
 
     // Authenticate
@@ -212,4 +212,3 @@ func SliceForAppend(in []byte, n int) (head, tail []byte) {
     tail = head[len(in):]
     return
 }
-
