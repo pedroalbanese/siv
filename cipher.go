@@ -7,7 +7,6 @@ import (
     "hash"
 
     "github.com/pedroalbanese/pmac"
-    "github.com/pedroalbanese/cmac"
 )
 
 // MaxAssociatedDataItems é o número máximo de itens de dados associados
@@ -39,7 +38,8 @@ func NewCMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c.h = h
     c.b = ctrBlock
 
-    blocksize := macBlock.BlockSize()
+    // Use o tamanho do bloco diretamente
+    blockSize := macBlock.BlockSize()
     c.tmp1 = pmac.Block{}
     c.tmp2 = pmac.Block{}
 
@@ -53,7 +53,8 @@ func NewPMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c.h = h
     c.b = ctrBlock
 
-    blocksize := macBlock.BlockSize()
+    // Use o tamanho do bloco diretamente
+    blockSize := macBlock.BlockSize()
     c.tmp1 = pmac.Block{}
     c.tmp2 = pmac.Block{}
 
