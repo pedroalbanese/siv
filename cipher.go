@@ -1,39 +1,34 @@
 package siv
 
 import (
-    "hash"
-    "errors"
     "crypto/cipher"
     "crypto/subtle"
-    "github.com/pedroalbanese/cmac"
+    "errors"
+    "hash"
+
     "github.com/pedroalbanese/pmac"
+    "github.com/pedroalbanese/cmac"
 )
 
-// MaxAssociatedDataItems is the maximum number of associated data items
+// MaxAssociatedDataItems é o número máximo de itens de dados associados
 const MaxAssociatedDataItems = 126
 
 var (
-    // ErrNotAuthentic indicates a ciphertext is malformed or corrupt
+    // ErrNotAuthentic indica que o texto cifrado está malformado ou corrompido
     ErrNotAuthentic = errors.New("siv: authentication failed")
 
-    // ErrTooManyAssociatedDataItems indicates more than MaxAssociatedDataItems were given
+    // ErrTooManyAssociatedDataItems indica que mais do que MaxAssociatedDataItems foram fornecidos
     ErrTooManyAssociatedDataItems = errors.New("siv: too many associated data items")
 )
 
-// Cipher is an instance of AES-SIV, configured with either AES-CMAC or
-// AES-PMAC as a message authentication code.
+// Cipher é uma instância de AES-SIV, configurada com CMAC ou PMAC
 type Cipher struct {
-    // MAC function used to derive a synthetic IV and authenticate the message
     h hash.Hash
-
-    // Block cipher function used to encrypt the message
     b cipher.Block
-
-    // Internal buffers
     tmp1, tmp2 pmac.Block
 }
 
-// NewCMACCipher returns a new SIV cipher.
+// NewCMACCipher retorna um novo cifrador SIV usando CMAC.
 func NewCMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c = new(Cipher)
     h, err := cmac.New(macBlock)
@@ -45,53 +40,43 @@ func NewCMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c.b = ctrBlock
 
     blocksize := macBlock.BlockSize()
-    c.tmp1 = pmac.NewBlock(blocksize)
-    c.tmp2 = pmac.NewBlock(blocksize)
+    c.tmp1 = pmac.Block{}
+    c.tmp2 = pmac.Block{}
 
     return c, nil
 }
 
-// NewPMACCipher returns a new SIV cipher.
+// NewPMACCipher retorna um novo cifrador SIV usando PMAC.
 func NewPMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c = new(Cipher)
-    h, err := pmac.New(macBlock)
-    if err != nil {
-        return nil, err
-    }
-
+    h := pmac.New(macBlock)
     c.h = h
     c.b = ctrBlock
 
     blocksize := macBlock.BlockSize()
-    c.tmp1 = pmac.NewBlock(blocksize)
-    c.tmp2 = pmac.NewBlock(blocksize)
+    c.tmp1 = pmac.Block{}
+    c.tmp2 = pmac.Block{}
 
     return c, nil
 }
 
-// Overhead returns the difference between plaintext and ciphertext lengths.
+// Overhead retorna a diferença entre o comprimento do texto simples e do texto cifrado.
 func (c *Cipher) Overhead() int {
     return c.h.Size()
 }
 
-// Seal encrypts and authenticates plaintext, authenticates the given
-// associated data items, and appends the result to dst, returning the updated
-// slice.
-//
-// The plaintext and dst may alias exactly or not at all.
-//
-// For nonce-based encryption, the nonce should be the last associated data item.
+// Seal criptografa e autentica o texto simples e os dados associados, e anexa o resultado a dst, retornando o slice atualizado.
 func (c *Cipher) Seal(dst []byte, plaintext []byte, data ...[]byte) ([]byte, error) {
     if len(data) > MaxAssociatedDataItems {
         return nil, ErrTooManyAssociatedDataItems
     }
 
-    // Authenticate
+    // Autentica
     iv := c.s2v(data, plaintext)
-    ret, out := SliceForAppend(dst, len(iv)+len(plaintext))
+    ret, out := sliceForAppend(dst, len(iv)+len(plaintext))
     copy(out, iv)
 
-    // Encrypt
+    // Criptografa
     zeroIVBits(iv)
 
     ctr := cipher.NewCTR(c.b, iv)
@@ -100,14 +85,7 @@ func (c *Cipher) Seal(dst []byte, plaintext []byte, data ...[]byte) ([]byte, err
     return ret, nil
 }
 
-// Open decrypts ciphertext, authenticates the decrypted plaintext and the given
-// associated data items and, if successful, appends the resulting plaintext
-// to dst, returning the updated slice. The additional data items must match the
-// items passed to Seal.
-//
-// The ciphertext and dst may alias exactly or not at all.
-//
-// For nonce-based encryption, the nonce should be the last associated data item.
+// Open descriptografa o texto cifrado, autentica o texto simples descriptografado e os dados associados e, se bem-sucedido, anexa o texto resultante a dst, retornando o slice atualizado.
 func (c *Cipher) Open(dst []byte, ciphertext []byte, data ...[]byte) ([]byte, error) {
     if len(data) > MaxAssociatedDataItems {
         return nil, ErrTooManyAssociatedDataItems
@@ -116,17 +94,17 @@ func (c *Cipher) Open(dst []byte, ciphertext []byte, data ...[]byte) ([]byte, er
         return nil, ErrNotAuthentic
     }
 
-    // Decrypt
-    iv := c.tmp1.Data[:c.Overhead()]
+    // Descriptografa
+    iv := c.tmp1[:c.Overhead()]
     copy(iv, ciphertext)
     zeroIVBits(iv)
 
     ctr := cipher.NewCTR(c.b, iv)
 
-    ret, out := alias.SliceForAppend(dst, len(ciphertext)-len(iv))
+    ret, out := sliceForAppend(dst, len(ciphertext)-len(iv))
     ctr.XORKeyStream(out, ciphertext[len(iv):])
 
-    // Authenticate
+    // Autentica
     expected := c.s2v(data, out)
     if subtle.ConstantTimeCompare(ciphertext[:len(iv)], expected) != 1 {
         return nil, ErrNotAuthentic
@@ -142,12 +120,12 @@ func (c *Cipher) s2v(s [][]byte, sn []byte) []byte {
     tmp, d := c.tmp1, c.tmp2
     tmp.Clear()
 
-    _, err := h.Write(tmp.Data)
+    _, err := h.Write(tmp[:])
     if err != nil {
         panic(err)
     }
 
-    copy(d.Data, h.Sum(d.Data[:0]))
+    copy(d[:], h.Sum(d[:0]))
     h.Reset()
 
     for _, v := range s {
@@ -156,36 +134,36 @@ func (c *Cipher) s2v(s [][]byte, sn []byte) []byte {
             panic(err)
         }
 
-        copy(tmp.Data, h.Sum(tmp.Data[:0]))
+        copy(tmp[:], h.Sum(tmp[:0]))
         h.Reset()
         d.Dbl()
 
-        xor(d.Data, tmp.Data)
+        xor(d[:], tmp[:])
     }
 
     tmp.Clear()
 
     if len(sn) >= h.BlockSize() {
-        n := len(sn) - len(d.Data)
-        copy(tmp.Data, sn[n:])
+        n := len(sn) - len(d[:])
+        copy(tmp[:], sn[n:])
         _, err = h.Write(sn[:n])
         if err != nil {
             panic(err)
         }
     } else {
-        copy(tmp.Data, sn)
-        tmp.Data[len(sn)] = 0x80
+        copy(tmp[:], sn)
+        tmp[len(sn)] = 0x80
         d.Dbl()
     }
 
-    xor(tmp.Data, d.Data)
+    xor(tmp[:], d[:])
 
-    _, err = h.Write(tmp.Data)
+    _, err = h.Write(tmp[:])
     if err != nil {
         panic(err)
     }
 
-    return h.Sum(tmp.Data[:0])
+    return h.Sum(tmp[:0])
 }
 
 func zeroIVBits(iv []byte) {
@@ -196,19 +174,22 @@ func zeroIVBits(iv []byte) {
     iv[len(iv)-4] &= 0x7f
 }
 
-// XOR the contents of b into a in-place
+// XOR o conteúdo de b em a no lugar
 func xor(a, b []byte) {
-    subtle.XORBytes(a, a, b)
+    for i := range b {
+        a[i] ^= b[i]
+    }
 }
 
-// SliceForAppend garante que o slice de entrada (in) tenha espaço suficiente e retorna uma nova fatia.
-func SliceForAppend(in []byte, n int) (head, tail []byte) {
+// Função auxiliar para criar o slice final e o slice extra
+func sliceForAppend(in []byte, n int) (head, tail []byte) {
     if total := len(in) + n; cap(in) >= total {
         head = in[:total]
     } else {
         head = make([]byte, total)
         copy(head, in)
     }
+
     tail = head[len(in):]
     return
 }
