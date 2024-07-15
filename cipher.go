@@ -6,6 +6,7 @@ import (
     "errors"
     "hash"
 
+    "github.com/pedroalbanese/cmac"
     "github.com/pedroalbanese/pmac"
 )
 
@@ -39,7 +40,7 @@ func NewCMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c.b = ctrBlock
 
     // Use o tamanho do bloco diretamente
-    blockSize := macBlock.BlockSize()
+//    blockSize := macBlock.BlockSize()
     c.tmp1 = pmac.Block{}
     c.tmp2 = pmac.Block{}
 
@@ -54,7 +55,7 @@ func NewPMACCipher(macBlock, ctrBlock cipher.Block) (c *Cipher, err error) {
     c.b = ctrBlock
 
     // Use o tamanho do bloco diretamente
-    blockSize := macBlock.BlockSize()
+//    blockSize := macBlock.BlockSize()
     c.tmp1 = pmac.Block{}
     c.tmp2 = pmac.Block{}
 
